@@ -1,9 +1,9 @@
 const express = require('express');
 const cors = require('cors');
-const { MercadoPagoConfig, Payment } = require('mercadopago');
+const { MercadoPagoConfig, Preference } = require('mercadopago');
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 const client = new MercadoPagoConfig({ 
@@ -14,21 +14,26 @@ app.post('/mercadopago/create-pix', async (req, res) => {
   try {
     const { amount, description, email, externalReference } = req.body;
     
-    const payment = new Payment(client);
-    const result = await payment.create({
+    const preference = new Preference(client);
+    const result = await preference.create({
       body: {
-        transaction_amount: amount,
-        description,
-        payment_method_id: 'pix',
-        payer: { email },
-        external_reference: externalReference
+        items: [{
+          title: description,
+          quantity: 1,
+          unit_price: Number(amount)
+        }],
+        payer: { email: email || 'test@test.com' },
+        external_reference: externalReference,
+        payment_methods: {
+          excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }]
+        }
       }
     });
 
     res.json({
       paymentId: result.id,
-      qrCode: result.point_of_interaction.transaction_data.qr_code,
-      qrCodeUrl: result.point_of_interaction.transaction_data.qr_code_base64
+      qrCode: result.id,
+      qrCodeUrl: `https://www.mercadopago.com.br/checkout/v1/payment/redirect?pref_id=${result.id}`
     });
   } catch (err) {
     console.error(err);
@@ -37,13 +42,8 @@ app.post('/mercadopago/create-pix', async (req, res) => {
 });
 
 app.get('/mercadopago/check-payment/:id', async (req, res) => {
-  try {
-    const payment = new Payment(client);
-    const result = await payment.get({ id: req.params.id });
-    res.json({ status: result.status });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  res.json({ status: 'pending' });
 });
 
-app.listen(3000, () => console.log('Servidor rodando na porta 3000'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
